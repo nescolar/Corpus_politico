@@ -1,0 +1,28 @@
+# paquetes
+import pandas as pd
+import re
+
+from nltk.corpus import stopwords
+from nltk.stem.wordnet import WordNetLemmatizer
+
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+from sklearn.feature_extraction.text import CountVectorizer # 1
+
+documents = (
+    "Text analysis relies on numerical representations",
+    "Vectors and matrices are core mathematical tools",
+    "Large collections of text can be processed efficiently"
+)
+
+vectorizer = CountVectorizer(stop_words="english")  # 2
+vectorizer
+
+X = vectorizer.fit_transform(documents)             # 3
+X
+
+# Inspect the learned vocabulary and document-term matrix
+print(vectorizer.vocabulary_)  # 4 --> first output
+print(X.todense())             # 5a --> second output
+print(X.toarray())             # 5b --> second output

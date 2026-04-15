@@ -1,0 +1,561 @@
+---
+title: "Lexical Foundations and Vocabulary Construction in NLP"
+author: "Natali Angarita Escolar — Universidad del Norte"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: '3'
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: flatly
+    highlight: tango
+    number_sections: true
+subtitle: 'Applied Activity: *Somewhere Over the Rainbow*'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+set.seed(42)
+```
+
+```{r libraries, message=FALSE, warning=FALSE}
+# ── Required libraries ──────────────────────────────────────────────────────
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(knitr)
+library(kableExtra)
+library(ggplot2)
+library(SnowballC)
+library(stopwords)
+library(tidyr)
+library(tibble)
+library(tinytex)
+options(knitr.table.format = "latex")
+
+# ── Library versions ─────────────────────────────────────────────────────────
+pkg_versions <- data.frame(
+  Package = c("tidytext","dplyr","stringr","knitr",
+              "kableExtra","ggplot2","SnowballC","stopwords","tidyr","tibble"),
+  Version = sapply(c("tidytext","dplyr","stringr","knitr",
+                     "kableExtra","ggplot2","SnowballC","stopwords","tidyr","tibble"),
+                   function(p) as.character(packageVersion(p)))
+)
+
+kable(pkg_versions, caption = "Table 0.1: Library versions used in this document") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = FALSE)
+```
+
+---
+
+# Text Description
+
+**"Somewhere Over the Rainbow"** is one of the most iconic songs in the history of American popular
+music. It was composed by **Harold Arlen** with lyrics by **E.Y. Harburg**, and was introduced by
+**Judy Garland** in the 1939 film *The Wizard of Oz*. The song is widely considered part of the
+**public domain** for lyrical study and educational purposes, and has been recorded by hundreds of
+artists, most famously by Israel Kamakawiwoʻole in 1993.
+
+The song expresses a **longing for an idealized world** beyond hardship — a place where dreams
+come true, troubles vanish, and the impossible becomes possible. Its language is rich in
+**emotional vocabulary**, **nature imagery**, **wishful modality** (*wish*, *dare*, *find*),
+and **spatial metaphors** (*over*, *above*, *beyond*), making it an ideal text for NLP analysis.
+
+**Fragment selected for analysis:**
+
+> *Someday I'll wish upon a star*
+> *Wake up where the clouds are far behind me*
+> *Where trouble melts like lemon drops*
+> *High above the chimney tops, that's where*
+> *You'll find me*
+> *Oh, somewhere over the rainbow*
+> *Blue birds fly*
+> *And the dream that you dare to*
+> *Oh, why, oh, why can't I?*
+
+```{r define-text}
+# ── Song fragment: one element per line ──────────────────────────────────────
+song_lines <- c(
+  "Someday I'll wish upon a star",
+  "Wake up where the clouds are far behind me",
+  "Where trouble melts like lemon drops",
+  "High above the chimney tops that's where",
+  "You'll find me",
+  "Oh somewhere over the rainbow",
+  "Blue birds fly",
+  "And the dream that you dare to",
+  "Oh why oh why can't I"
+)
+
+# ── Full text as a single string ─────────────────────────────────────────────
+song_text <- paste(song_lines, collapse = " ")
+cat("Full text:\n", song_text, "\n")
+```
+
+---
+
+# Lexicons
+
+A **lexicon** is the set of words recognized and used within a language or domain. In NLP it
+functions as a dictionary that defines which terms are meaningful in a given context. Words outside
+the lexicon are typically ignored, replaced, or decomposed into smaller units
+(LLinás Solano, 2026, §3).
+
+The table below presents a lexicon of **15 entries** derived directly from the song fragment.
+Each entry includes the lexical item, a conceptual category, and a short interpretation.
+
+```{r lexicon-table}
+# ── Lexicon: 15 entries ──────────────────────────────────────────────────────
+lexicon <- tribble(
+  ~`Lexical Item`, ~`Category`,          ~`Description / Interpretation`,
+  "someday",       "Temporal adverb",    "Refers to an unspecified future moment; expresses hope",
+  "wish",          "Action / Desire",    "Verb expressing a longing for something not yet real",
+  "star",          "Nature / Symbol",    "Celestial body; culturally symbolizes wishes and dreams",
+  "wake",          "Action",             "To come out of sleep; signals a transition or awakening",
+  "clouds",        "Nature",             "Atmospheric formations; metaphor for obstacles or distance",
+  "far",           "Spatial adjective",  "At a great distance; emphasizes separation from trouble",
+  "trouble",       "Emotion / State",    "Difficulty or distress; the negative reality being escaped",
+  "melts",         "Action / Metaphor",  "To dissolve; implies troubles disappearing like solids",
+  "lemon",         "Nature / Sensory",   "Citrus fruit used metaphorically for bitterness turned sweet",
+  "drops",         "Nature / Action",    "Small falling quantities; part of the compound 'lemon drops'",
+  "chimney",       "Place / Object",     "Part of a rooftop; grounds the song in a domestic setting",
+  "rainbow",       "Nature / Symbol",    "Optical phenomenon; central symbol of hope and aspiration",
+  "blue",          "Color / Emotion",    "Color associated with sky and birds; also connotes longing",
+  "dream",         "Emotion / Concept",  "An aspiration or vision; core thematic word of the song",
+  "dare",          "Action / Emotion",   "To have the courage to attempt; implies risk in hoping"
+)
+
+kable(lexicon,
+      caption = "Table 3.1: Song lexicon — 15 entries derived from the fragment") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = TRUE) %>%
+  column_spec(1, bold = TRUE)
+```
+
+---
+
+# Phonemes, Graphemes, and Morphemes
+
+Before building a vocabulary, it is useful to understand three basic linguistic units
+(LLinás Solano, 2026, §4):
+
+- **Phonemes**: the smallest *sound* units that distinguish meaning in spoken language.
+- **Graphemes**: letters or letter groups that *represent* phonemes in written language.
+- **Morphemes**: the smallest units that *carry meaning* (roots, prefixes, suffixes).
+
+The table below illustrates all three concepts using words taken directly from the song fragment.
+
+```{r pgm-table}
+steelblue <- "#4682B4"
+# ── Phonemes, graphemes, morphemes illustration ──────────────────────────────
+pgm <- tribble(
+  ~Word,       ~Phonemes,                          ~Graphemes,                        ~Morphemes,
+  "rainbow",   "/r/ /eɪ/ /n/ /b/ /oʊ/  — 5 sounds","r, ai, n, b, ow  — 5 graphemes", "rain + bow  — 2 morphemes",
+  "somewhere", "/s/ /ʌ/ /m/ /w/ /ɛ/ /r/  — 6 sounds","s, o, m, e, w, h, e, r, e — 9 graphemes","some + where  — 2 morphemes",
+  "bluebirds", "/b/ /l/ /uː/ /b/ /ɜːr/ /d/ /z/  — 7","b, l, ue, b, ir, d, s — 7 graphemes",  "blue + bird + s  — 3 morphemes",
+  "trouble",   "/t/ /r/ /ʌ/ /b/ /əl/  — 5 sounds",   "t, r, ou, b, l, e  — 6 graphemes",    "trouble  — 1 morpheme (root)",
+  "chimney",   "/tʃ/ /ɪ/ /m/ /n/ /iː/  — 5 sounds",  "ch, i, m, n, ey  — 5 graphemes",      "chimney  — 1 morpheme (root)",
+  "someday",   "/s/ /ʌ/ /m/ /d/ /eɪ/  — 5 sounds",   "s, o, m, e, d, a, y  — 7 graphemes",  "some + day  — 2 morphemes"
+)
+
+kable(pgm,
+      caption = "Table 4.1: Phonemes, graphemes and morphemes illustrated with song words") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = TRUE) %>%
+  column_spec(1, bold = TRUE, color = steelblue)
+```
+
+**Key distinctions:**
+
+- *rainbow* has **5 phonemes** but the grapheme `ow` represents a single sound `/oʊ/`,
+  illustrating that phonemes ≠ letters.
+- *bluebirds* decomposes into **3 morphemes** (`blue` + `bird` + `s`), showing how meaning
+  accumulates through morphological structure.
+- *somewhere* and *someday* both share the prefix morpheme `some-`, demonstrating
+  productive morphology.
+
+---
+
+# Tokenization
+
+Tokenization is the process of segmenting text into smaller units called **tokens**
+(LLinás Solano, 2026, §5). We apply and compare three strategies below.
+
+## Sentence Tokenization
+
+```{r sentence-tokenization}
+# ── Sentence tokenization: each line = one sentence ──────────────────────────
+sentence_tokens <- song_lines
+
+n_sentences <- length(sentence_tokens)
+cat("Total number of sentence tokens:", n_sentences, "\n\n")
+
+sent_df <- data.frame(
+  `Sentence #` = seq_along(sentence_tokens),
+  `Sentence token` = sentence_tokens,
+  check.names = FALSE
+)
+
+kable(sent_df,
+      caption = "Table 5.1: Sentence-level tokenization") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = TRUE)
+```
+
+## Word Tokenization
+
+```{r word-tokenization}
+# ── Word tokenization ─────────────────────────────────────────────────────────
+# Remove punctuation and split on whitespace
+word_tokens <- unlist(str_split(
+  str_replace_all(song_text, "[[:punct:]]", ""),
+  "\\s+"
+))
+word_tokens <- word_tokens[word_tokens != ""]
+
+n_words <- length(word_tokens)
+cat("Total number of word tokens:", n_words, "\n\n")
+
+# Frequency table
+word_freq <- sort(table(tolower(word_tokens)), decreasing = TRUE)
+word_freq_df <- data.frame(
+  Token     = names(word_freq),
+  Frequency = as.integer(word_freq)
+)
+
+kable(head(word_freq_df, 15),
+      caption = "Table 5.2: Top-15 most frequent word tokens") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = FALSE)
+```
+
+```{r word-token-plot, fig.cap="Figure 5.1: Top-10 most frequent word tokens"}
+ggplot(head(word_freq_df, 10),
+       aes(x = reorder(Token, Frequency), y = Frequency)) +
+  geom_col(fill = "steelblue", width = 0.7) +
+  coord_flip() +
+  labs(title = "Top-10 Word Tokens - Somewhere Over the Rainbow",
+       x = "Token", y = "Frequency") +
+  theme_minimal(base_size = 13)
+```
+
+## Character-Level Tokenization
+
+```{r char-tokenization}
+# ── Character-level tokenization ─────────────────────────────────────────────
+clean_text   <- str_replace_all(song_text, "[[:punct:]\\s]", "")
+char_tokens  <- unlist(str_split(tolower(clean_text), ""))
+
+n_chars <- length(char_tokens)
+cat("Total number of character tokens:", n_chars, "\n\n")
+
+char_freq <- sort(table(char_tokens), decreasing = TRUE)
+char_freq_df <- data.frame(
+  Character = names(char_freq),
+  Frequency = as.integer(char_freq)
+)
+
+kable(head(char_freq_df, 10),
+      caption = "Table 5.3: Top-10 most frequent character tokens") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = FALSE)
+```
+
+## Summary of Tokenization Results
+
+```{r tokenization-summary}
+tok_summary <- data.frame(
+  Strategy            = c("Sentence tokenization",
+                           "Word tokenization",
+                           "Character tokenization"),
+  `Total tokens`      = c(n_sentences, n_words, n_chars),
+  `Most frequent`     = c(
+    "All lines appear once",
+    paste(head(word_freq_df$Token, 3), collapse = ", "),
+    paste(head(char_freq_df$Character, 3), collapse = ", ")
+  ),
+  check.names = FALSE
+)
+
+kable(tok_summary,
+      caption = "Table 5.4: Comparison of tokenization strategies") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = TRUE)
+```
+
+**Interpretation:** Word tokenization reveals that function words (*oh*, *where*, *the*) dominate
+by frequency, which is expected in short lyrical texts. Character tokenization shows vowels (`e`,
+`o`, `a`) as the most common characters — consistent with English phonology. The 9-sentence
+structure reflects the verse-by-verse organization of the fragment.
+
+---
+
+# Different Types of Tokenizers
+
+Following LLinás Solano (2026, §6), we apply **rule-based tokenization** using regular
+expressions (`stringr`) to extract specific entities from the song text.
+We design **three** regex patterns targeting different linguistic structures.
+
+```{r regex-setup}
+# Full text with original punctuation kept for regex demonstration
+song_text_raw <- paste(c(
+  "Someday I'll wish upon a star",
+  "Wake up where the clouds are far behind me",
+  "Where trouble melts like lemon drops",
+  "High above the chimney tops, that's where",
+  "You'll find me",
+  "Oh, somewhere over the rainbow",
+  "Blue birds fly",
+  "And the dream that you dare to",
+  "Oh, why, oh, why can't I?"
+), collapse = " ")
+
+cat("Raw text used for regex:\n", song_text_raw, "\n")
+```
+
+## Regex 1 — Contractions (words with apostrophes)
+
+```{r regex1}
+# Pattern: word characters + apostrophe + word characters
+pattern1  <- "[A-Za-z]+\\'[A-Za-z]+"
+matches1  <- str_extract_all(song_text_raw, pattern1)[[1]]
+
+cat("Pattern:", pattern1, "\n")
+cat("Matches found:", length(matches1), "\n")
+
+res1 <- data.frame(
+  Match = matches1,
+  Explanation = c(
+    "I'll  → I + will  (future contraction)",
+    "that's → that + is (copula contraction)",
+    "You'll → You + will (future contraction)",
+    "can't  → can + not (negation contraction)"
+  )[seq_along(matches1)]
+)
+
+kable(res1,
+      caption = "Table 6.1: Regex 1 — Contractions extracted from the text") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = FALSE)
+```
+
+**What this pattern captures:** Sequences of letters separated by an apostrophe (`'`).
+This is directly relevant to the tokenization challenge discussed in §5 of the course notes:
+simple `split()` treats *I'll* as one token, while linguistically it represents two morphemes.
+
+## Regex 2 — Capitalised words (potential proper nouns / sentence starters)
+
+```{r regex2}
+# Pattern: word starting with an uppercase letter
+pattern2 <- "\\b[A-Z][a-z]+"
+matches2 <- str_extract_all(song_text_raw, pattern2)[[1]]
+
+cat("Pattern:", pattern2, "\n")
+cat("Matches found:", length(matches2), "\n")
+
+res2 <- data.frame(
+  `Capitalised token` = matches2,
+  check.names = FALSE
+)
+
+kable(res2,
+      caption = "Table 6.2: Regex 2 — Capitalised words extracted") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = FALSE)
+```
+
+**What this pattern captures:** Words beginning with an uppercase letter (`[A-Z]`) followed by
+one or more lowercase letters. This identifies sentence-initial words and potential named entities.
+In this text, all matches are sentence starters — there are no proper nouns, which reflects the
+abstract, universal nature of the lyrics.
+
+## Regex 3 — Monosyllabic exclamations / interjections
+
+```{r regex3}
+# Pattern: "Oh" or "why" (interjections repeated in the fragment)
+pattern3 <- "\\b(Oh|oh|why|Why)\\b"
+matches3 <- str_extract_all(song_text_raw, pattern3)[[1]]
+
+cat("Pattern:", pattern3, "\n")
+cat("Matches found:", length(matches3), "\n")
+
+res3 <- data.frame(
+  Match = matches3,
+  Type  = ifelse(tolower(matches3) == "oh", "Exclamation / filler", "Interrogative adverb")
+)
+
+kable(res3,
+      caption = "Table 6.3: Regex 3 — Interjections and interrogatives") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = FALSE)
+```
+
+**What this pattern captures:** The alternation `(Oh|oh|why|Why)` with word boundaries (`\\b`)
+extracts the emotional interjections that give the closing lines their rhetorical force.
+As noted in the course (§6.0.1), `a|b` in regex matches either option — here applied to
+case-insensitive variants of the same word.
+
+---
+
+# Word Normalization
+
+Word normalization maps different surface forms to a consistent representation, controlling
+vocabulary size and reducing noise (LLinás Solano, 2026, §7). We apply the following pipeline.
+
+```{r normalization-pipeline}
+# ── Step 0: Original tokens (before normalization) ───────────────────────────
+original_tokens <- unlist(str_split(song_text_raw, "\\s+"))
+original_tokens <- original_tokens[original_tokens != ""]
+
+cat("Original token count:", length(original_tokens), "\n")
+cat("Original vocabulary size:", length(unique(tolower(original_tokens))), "\n\n")
+```
+
+## Step 1 — Lowercasing
+
+```{r lowercasing}
+tokens_lower <- tolower(original_tokens)
+cat("After lowercasing — unique forms:", length(unique(tokens_lower)), "\n")
+cat("Sample:", paste(head(tokens_lower, 10), collapse = " "), "\n")
+```
+
+## Step 2 — Punctuation Removal
+
+```{r punct-removal}
+tokens_nopunct <- str_replace_all(tokens_lower, "[[:punct:]]", "")
+tokens_nopunct <- tokens_nopunct[tokens_nopunct != ""]
+
+cat("After punctuation removal — tokens:", length(tokens_nopunct), "\n")
+cat("Vocabulary size:", length(unique(tokens_nopunct)), "\n")
+cat("Sample:", paste(head(tokens_nopunct, 10), collapse = " "), "\n")
+```
+
+## Step 3 — Stopword Removal
+
+```{r stopword-removal}
+en_stopwords <- stopwords("en", source = "snowball")
+
+tokens_nostop <- tokens_nopunct[!tokens_nopunct %in% en_stopwords]
+
+cat("After stopword removal — tokens:", length(tokens_nostop), "\n")
+cat("Vocabulary size:", length(unique(tokens_nostop)), "\n")
+cat("Remaining tokens:", paste(tokens_nostop, collapse = " "), "\n")
+```
+
+## Step 4 — Stemming
+
+```{r stemming}
+tokens_stemmed <- wordStem(tokens_nostop, language = "english")
+
+cat("After stemming — unique stems:", length(unique(tokens_stemmed)), "\n")
+cat("Stemmed tokens:", paste(tokens_stemmed, collapse = " "), "\n")
+```
+
+## Vocabulary Comparison: Before vs After Normalization
+
+```{r vocab-comparison}
+# Vocabulary at each stage
+vocab_original <- unique(tolower(original_tokens))
+vocab_nopunct  <- unique(tokens_nopunct)
+vocab_nostop   <- unique(tokens_nostop)
+vocab_stemmed  <- unique(tokens_stemmed)
+
+# Comparison table
+vocab_comp <- data.frame(
+  Stage = c(
+    "0. Original (raw)",
+    "1. Lowercasing",
+    "2. Punctuation removal",
+    "3. Stopword removal",
+    "4. Stemming"
+  ),
+  `Token count` = c(
+    length(original_tokens),
+    length(tokens_lower),
+    length(tokens_nopunct),
+    length(tokens_nostop),
+    length(tokens_stemmed)
+  ),
+  `Vocabulary size` = c(
+    length(vocab_original),
+    length(unique(tokens_lower)),
+    length(vocab_nopunct),
+    length(vocab_nostop),
+    length(vocab_stemmed)
+  ),
+  `Example tokens` = c(
+    paste(head(original_tokens, 5), collapse = ", "),
+    paste(head(tokens_lower,    5), collapse = ", "),
+    paste(head(tokens_nopunct,  5), collapse = ", "),
+    paste(head(tokens_nostop,   5), collapse = ", "),
+    paste(head(tokens_stemmed,  5), collapse = ", ")
+  ),
+  check.names = FALSE
+)
+
+kable(vocab_comp,
+      caption = "Table 7.1: Vocabulary before and after each normalization step") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                full_width = TRUE) %>%
+  row_spec(5, bold = TRUE, background = "#e8f4fd")
+```
+
+```{r vocab-plot, fig.cap="Figure 7.1: Vocabulary size reduction across normalization stages"}
+ggplot(vocab_comp,
+       aes(x = Stage, y = `Vocabulary size`, group = 1)) +
+  geom_line(color = "steelblue", linewidth = 1.2) +
+  geom_point(color = "steelblue", size = 4) +
+  geom_text(aes(label = `Vocabulary size`), vjust = -0.8, size = 4) +
+  labs(title = "Vocabulary Size Reduction Through Normalization",
+       subtitle = "Somewhere Over the Rainbow - NLP Pipeline",
+       x = NULL, y = "Unique vocabulary items") +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 20, hjust = 1))
+```
+
+**Discussion of observed changes:**
+
+- **Lowercasing** collapses case variants (e.g., *Oh* and *oh*) into a single type, immediately
+  reducing vocabulary redundancy.
+- **Punctuation removal** eliminates non-lexical characters and also resolves contractions like
+  *I'll* and *can't* into single tokens without apostrophes (`ill`, `cant`) — a simplification
+  with semantic costs.
+- **Stopword removal** has the largest impact: function words (*oh*, *the*, *where*, *a*, *to*,
+  *I*) dominate the lyrics but carry little standalone semantic weight. Removing them exposes the
+  content words: *someday*, *wish*, *star*, *trouble*, *rainbow*, *dream*.
+- **Stemming** further compresses the vocabulary by mapping inflected forms to their root
+  (e.g., *melts* → *melt*, *birds* → *bird*, *drops* → *drop*), reducing the final vocabulary
+  to its most essential lexical cores.
+
+---
+
+# Summary
+
+Lexical choices, tokenization, and normalization are three interrelated stages that fundamentally
+determine how a text is represented in an NLP system. In *Somewhere Over the Rainbow*, the
+emotional power of the lyrics relies on carefully chosen words — *wish*, *dream*, *dare* — that
+belong to specific conceptual categories (desire, aspiration, uncertainty). Word tokenization
+reveals that function words dominate raw frequency counts, while content words carry the
+thematic weight of the text. Applying normalization progressively — lowercasing, punctuation
+removal, stopword filtering, and stemming — reduced the vocabulary from its original size to a
+compact set of meaningful stems, showing how preprocessing decisions shape what a model
+"sees." Crucially, each step involves a trade-off: removing stopwords like *why* or *oh* cleans
+noise but also erases the rhetorical texture of the verse. As LLinás Solano (2026) notes, these
+choices are modeling decisions that must be aligned with the downstream task, not universal
+rules applied blindly.
+
+---
+
+# References
+
+LLinás Solano, H. (2026). *Mathematics behind language representation: Lexical foundations and
+vocabulary construction in NLP*. Department of Mathematics and Statistics, Universidad del Norte.
+Retrieved from https://rpubs.com/hllinas/R_AI1_toc
+
+Arlen, H., & Harburg, E. Y. (1939). *Somewhere over the rainbow* [Song]. From *The Wizard of Oz*.
+Metro-Goldwyn-Mayer.
